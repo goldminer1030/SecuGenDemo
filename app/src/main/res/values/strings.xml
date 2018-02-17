@@ -21,4 +21,19 @@
     <string name="capture_mode_n_on">Mode N On</string>
     <string name="capture_mode_n_off">Mode N Off</string>
     <string name="toggle_button">ToggleButton</string>
+    <string name="title_activity_main">MainActivity</string>
+
+    <string name="title_section_main">Main</string>
+    <string name="title_section_test_sdk">SDK Test</string>
+
+    <string name="navigation_drawer_open">Open navigation drawer</string>
+    <string name="navigation_drawer_close">Close navigation drawer</string>
+
+    <string name="action_example">Example action</string>
+
+    <string name="action_settings">Settings</string>
+
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="fingerprint_view">Fingerprint View</string>
 </resources>

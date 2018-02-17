@@ -85,7 +85,7 @@ public class JSGDActivity extends Activity
     		//DEBUG Log.d(TAG,"Enter mUsbReceiver.onReceive()");
     		if (ACTION_USB_PERMISSION.equals(action)) {
     			synchronized (this) {
-    				UsbDevice device = (UsbDevice)intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+    				UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
     				if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
     					if(device != null){
     						//DEBUG Log.d(TAG, "Vendor ID : " + device.getVendorId() + "\n");
@@ -144,28 +144,28 @@ public class JSGDActivity extends Activity
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.launcher);
-        mCapture = (Button)findViewById(R.id.buttonCapture);
+        mCapture = findViewById(R.id.buttonCapture);
         mCapture.setOnClickListener(this);
-        mButtonRegister = (Button)findViewById(R.id.buttonRegister);
+        mButtonRegister = findViewById(R.id.buttonRegister);
         mButtonRegister.setOnClickListener(this);
-        mButtonMatch = (Button)findViewById(R.id.buttonMatch);
+        mButtonMatch = findViewById(R.id.buttonMatch);
         mButtonMatch.setOnClickListener(this);
-        mButtonLed = (Button)findViewById(R.id.buttonLedOn);
+        mButtonLed = findViewById(R.id.buttonLedOn);
         mButtonLed.setOnClickListener(this);
-        mSDKTest = (Button)findViewById(R.id.buttonSDKTest);
+        mSDKTest = findViewById(R.id.buttonSDKTest);
         mSDKTest.setOnClickListener(this);
-        mEditLog = (EditText)findViewById(R.id.editLog);
-        mTextViewResult = (android.widget.TextView)findViewById(R.id.textViewResult);
-        mCheckBoxMatched = (android.widget.CheckBox) findViewById(R.id.checkBoxMatched);
-        mToggleButtonSmartCapture = (android.widget.ToggleButton) findViewById(R.id.toggleButtonSmartCapture);
+        mEditLog = findViewById(R.id.editLog);
+        mTextViewResult = findViewById(R.id.textViewResult);
+        mCheckBoxMatched = findViewById(R.id.checkBoxMatched);
+        mToggleButtonSmartCapture = findViewById(R.id.toggleButtonSmartCapture);
         mToggleButtonSmartCapture.setOnClickListener(this);
-        mToggleButtonCaptureModeN = (android.widget.ToggleButton) findViewById(R.id.toggleButtonCaptureModeN);
+        mToggleButtonCaptureModeN = findViewById(R.id.toggleButtonCaptureModeN);
         mToggleButtonCaptureModeN.setOnClickListener(this);
-        mToggleButtonAutoOn = (android.widget.ToggleButton) findViewById(R.id.toggleButtonAutoOn);
+        mToggleButtonAutoOn = findViewById(R.id.toggleButtonAutoOn);
         mToggleButtonAutoOn.setOnClickListener(this);        
-        mImageViewFingerprint = (ImageView)findViewById(R.id.imageViewFingerprint);
-        mImageViewRegister = (ImageView)findViewById(R.id.imageViewRegister);
-        mImageViewVerify = (ImageView)findViewById(R.id.imageViewVerify);
+        mImageViewFingerprint = findViewById(R.id.imageViewFingerprint);
+        mImageViewRegister = findViewById(R.id.imageViewRegister);
+        mImageViewVerify = findViewById(R.id.imageViewVerify);
         grayBuffer = new int[JSGFPLib.MAX_IMAGE_WIDTH_ALL_DEVICES*JSGFPLib.MAX_IMAGE_HEIGHT_ALL_DEVICES];
         for (int i=0; i<grayBuffer.length; ++i)
         	grayBuffer[i] = Color.GRAY;
@@ -231,15 +231,14 @@ public class JSGDActivity extends Activity
         	dlgAlert.setPositiveButton("OK",
         			new DialogInterface.OnClickListener() {
         		      public void onClick(DialogInterface dialog,int whichButton){
-        		        	finish();
-        		        	return;        		    	  
+//        		        	finish();
+        		        	return;
         		      }        			
         			}
         	);
         	dlgAlert.setCancelable(false);
         	dlgAlert.create().show();        	
-        }
-        else {
+        } else {
 	        UsbDevice usbDevice = sgfplib.GetUsbDevice();
 	        if (usbDevice == null){
 	        	AlertDialog.Builder dlgAlert = new AlertDialog.Builder(this);
@@ -255,8 +254,7 @@ public class JSGDActivity extends Activity
 	        	);
 	        	dlgAlert.setCancelable(false);
 	        	dlgAlert.create().show();
-	        }
-	        else {
+	        } else {
 		        sgfplib.GetUsbManager().requestPermission(usbDevice, mPermissionIntent);
 		        error = sgfplib.OpenDevice(0);
 				debugMessage("OpenDevice() ret: " + error + "\n");
@@ -271,11 +269,12 @@ public class JSGDActivity extends Activity
 		        mRegisterTemplate = new byte[mMaxTemplateSize[0]];
 		        mVerifyTemplate = new byte[mMaxTemplateSize[0]];
 		        boolean smartCaptureEnabled = this.mToggleButtonSmartCapture.isChecked();
-		        if (smartCaptureEnabled)
-		        	sgfplib.WriteData((byte)5, (byte)1);
-		        else
-		        	sgfplib.WriteData((byte)5, (byte)0);
-		        if (mAutoOnEnabled){
+		        if (smartCaptureEnabled) {
+                    sgfplib.WriteData((byte) 5, (byte) 1);
+                } else {
+                    sgfplib.WriteData((byte) 5, (byte) 0);
+                }
+                if (mAutoOnEnabled){
 		        	autoOn.start();
 		        	DisableControls();
 		        }

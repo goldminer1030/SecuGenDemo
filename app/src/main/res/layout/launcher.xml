@@ -121,8 +121,7 @@
         android:layout_height="wrap_content"
         android:layout_x="17dp"
         android:layout_y="516dp"
-        android:text="@string/welcome"
-        android:textAppearance="?android:attr/textAppearanceLarge" />
+        android:text="@string/welcome" />
 
     <ImageView
         android:id="@+id/imageView1"
