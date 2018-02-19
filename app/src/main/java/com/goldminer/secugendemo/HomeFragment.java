@@ -1,9 +1,10 @@
 package com.goldminer.secugendemo;
 
+import android.app.AlertDialog;
 import android.app.Fragment;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Bitmap;
@@ -12,16 +13,32 @@ import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Switch;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+
 import SecuGen.FDxSDKPro.JSGFPLib;
+import SecuGen.FDxSDKPro.SGDeviceInfoParam;
+import SecuGen.FDxSDKPro.SGFDxErrorCode;
+import SecuGen.FDxSDKPro.SGFDxSecurityLevel;
+import SecuGen.FDxSDKPro.SGFDxTemplateFormat;
+import SecuGen.FDxSDKPro.SGFingerInfo;
+import SecuGen.FDxSDKPro.SGFingerPresentEvent;
 
 
 /**
@@ -32,7 +49,7 @@ import SecuGen.FDxSDKPro.JSGFPLib;
  * Use the {@link HomeFragment#newInstance} factory method to
  * create an instance of this fragment.
  */
-public class HomeFragment extends Fragment implements View.OnClickListener {
+public class HomeFragment extends Fragment implements View.OnClickListener, SGFingerPresentEvent {
     // TODO: Rename parameter arguments, choose names that match
     // the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
     private static final String ARG_PARAM1 = "param1";
@@ -53,10 +70,14 @@ public class HomeFragment extends Fragment implements View.OnClickListener {
     private Switch mToggleButtonSmartCapture;
     private Switch mToggleButtonCaptureModeN;
     private Switch mToggleButtonAutoOn;
-    private PendingIntent mPermissionIntent;
     private ImageView mImageViewFingerprint;
     private ImageView mImageViewRegister;
     private ImageView mImageViewVerify;
+
+    private byte[] mRegisterImage;
+    private byte[] mVerifyImage;
+    private byte[] mRegisterTemplate;
+    private byte[] mVerifyTemplate;
 
     private int mImageWidth;
     private int mImageHeight;
@@ -65,6 +86,7 @@ public class HomeFragment extends Fragment implements View.OnClickListener {
 
     private boolean mLed;
     private boolean mAutoOnEnabled;
+    private int nCaptureModeN;
 
     private Bitmap grayBitmap;
     private IntentFilter filter;
@@ -81,8 +103,8 @@ public class HomeFragment extends Fragment implements View.OnClickListener {
                     UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                     if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                         if(device != null){
-//                            debugMessage("Vendor ID : " + device.getVendorId() + "\n");
-//                            debugMessage("Product ID: " + device.getProductId() + "\n");
+                            debugMessage("Vendor ID : " + device.getVendorId() + "\n");
+                            debugMessage("Product ID: " + device.getProductId() + "\n");
                         } else {
                             Log.e(TAG, "mUsbReceiver.onReceive() Device is null");
                         }
@@ -116,6 +138,103 @@ public class HomeFragment extends Fragment implements View.OnClickListener {
         return fragment;
     }
 
+    public void debugMessage(String text) {
+        File externalStorageDir = Environment.getExternalStorageDirectory();
+        File logFile = new File(externalStorageDir , "SecuGenDemoLog.txt");
+        if (!logFile.exists()) {
+            try {
+                logFile.createNewFile();
+            } catch (IOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+        }
+        try {
+            //BufferedWriter for performance, true to set append to file flag
+            BufferedWriter buf = new BufferedWriter(new FileWriter(logFile, true));
+            Calendar c = Calendar.getInstance();
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String strDate = sdf.format(c.getTime());
+            buf.append(strDate);
+            buf.append(" ");
+            buf.append(text);
+            buf.newLine();
+            buf.close();
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+
+    public void CaptureFingerPrint(){
+        long dwTimeStart = 0, dwTimeEnd = 0, dwTimeElapsed = 0;
+        this.mCheckBoxMatched.setChecked(false);
+        byte[] buffer = new byte[mImageWidth*mImageHeight];
+        dwTimeStart = System.currentTimeMillis();
+
+        SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+        long result = sgManager.getImageEx(buffer, 10000,50);
+        sgManager.dumpFile("capture.raw", buffer);
+        dwTimeEnd = System.currentTimeMillis();
+        dwTimeElapsed = dwTimeEnd-dwTimeStart;
+        debugMessage("getImageEx(10000,50) ret:" + result + " [" + dwTimeElapsed + "ms]\n");
+        mTextViewResult.setText("getImageEx(10000,50) ret: " + result + " [" + dwTimeElapsed + "ms]\n");
+
+        //Read Serial number
+        byte[] szSerialNumber = new byte[15];
+        result = sgManager.readSerialNumber(szSerialNumber);
+        String SN = new String (szSerialNumber);
+        debugMessage("ReadSerialNumber() ret: " + result + " ["	+ new String(szSerialNumber) + "]\n");
+
+/*
+ *  No longer used
+ *
+	    Bitmap b = Bitmap.createBitmap(mImageWidth,mImageHeight, Bitmap.Config.ARGB_8888);
+	    b.setHasAlpha(false);
+	    int[] intbuffer = new int[mImageWidth*mImageHeight];
+	    for (int i=0; i<intbuffer.length; ++i)
+	    	intbuffer[i] = (int) buffer[i];
+	    b.setPixels(intbuffer, 0, mImageWidth, 0, 0, mImageWidth, mImageHeight);
+	    mImageViewFingerprint.setImageBitmap(this.toGrayscale(b));
+*/
+
+        mImageViewFingerprint.setImageBitmap(sgManager.toGrayscale(buffer, mImageWidth, mImageHeight));
+
+        buffer = null;
+        szSerialNumber = null;
+        SN = null;
+    }
+
+    public Handler fingerDetectedHandler = new Handler(){
+        // @Override
+        public void handleMessage(Message msg) {
+            //Handle the message
+            CaptureFingerPrint();
+            if (mAutoOnEnabled) {
+                mToggleButtonAutoOn.toggle();
+                EnableControls();
+            }
+        }
+    };
+
+    public void EnableControls(){
+        this.mCapture.setClickable(true);
+        this.mCapture.setTextColor(getResources().getColor(android.R.color.white));
+        this.mButtonRegister.setClickable(true);
+        this.mButtonRegister.setTextColor(getResources().getColor(android.R.color.white));
+        this.mButtonMatch.setClickable(true);
+        this.mButtonMatch.setTextColor(getResources().getColor(android.R.color.white));
+    }
+
+    public void DisableControls(){
+        this.mCapture.setClickable(false);
+        this.mCapture.setTextColor(getResources().getColor(android.R.color.black));
+        this.mButtonRegister.setClickable(false);
+        this.mButtonRegister.setTextColor(getResources().getColor(android.R.color.black));
+        this.mButtonMatch.setClickable(false);
+        this.mButtonMatch.setTextColor(getResources().getColor(android.R.color.black));
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -123,6 +242,114 @@ public class HomeFragment extends Fragment implements View.OnClickListener {
             mParam1 = getArguments().getString(ARG_PARAM1);
             mParam2 = getArguments().getString(ARG_PARAM2);
         }
+    }
+
+    @Override
+    public void onPause() {
+        Log.i(TAG, "onPause()");
+
+        SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+        sgManager.stop();
+
+        EnableControls();
+
+        getActivity().unregisterReceiver(mUsbReceiver);
+        mRegisterImage = null;
+        mVerifyImage = null;
+        mRegisterTemplate = null;
+        mVerifyTemplate = null;
+        mImageViewFingerprint.setImageBitmap(grayBitmap);
+        mImageViewRegister.setImageBitmap(grayBitmap);
+        mImageViewVerify.setImageBitmap(grayBitmap);
+        super.onPause();
+    }
+
+    @Override
+    public void onResume() {
+        Log.i(TAG, "onResume()");
+        super.onResume();
+
+        getActivity().registerReceiver(mUsbReceiver, filter);
+
+        SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+
+        long error = sgManager.init();
+        debugMessage("jnisgfplib init: " + error);
+        if (error != SGFDxErrorCode.SGFDX_ERROR_NONE){
+            AlertDialog.Builder dlgAlert = new AlertDialog.Builder(getActivity());
+            if (error == SGFDxErrorCode.SGFDX_ERROR_DEVICE_NOT_FOUND)
+                dlgAlert.setMessage("The attached fingerprint device is not supported on Android");
+            else
+                dlgAlert.setMessage("Fingerprint device initialization failed!");
+            dlgAlert.setTitle("SecuGen Fingerprint SDK");
+            dlgAlert.setPositiveButton("OK",
+                    new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog,int whichButton){
+        		        	getActivity().finish();
+                            return;
+                        }
+                    }
+            );
+            dlgAlert.setCancelable(false);
+            dlgAlert.create().show();
+        } else {
+            UsbDevice usbDevice = sgManager.getUsbDevice();
+            if (usbDevice == null){
+                AlertDialog.Builder dlgAlert = new AlertDialog.Builder(getActivity());
+                dlgAlert.setMessage("SDU04P or SDU03P fingerprint sensor not found!");
+                dlgAlert.setTitle("SecuGen Fingerprint SDK");
+                dlgAlert.setPositiveButton("OK",
+                        new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface dialog,int whichButton){
+                                getActivity().finish();
+                                return;
+                            }
+                        }
+                );
+                dlgAlert.setCancelable(false);
+                dlgAlert.create().show();
+            } else {
+                error = sgManager.openDevice();
+                debugMessage("OpenDevice() ret: " + error + "\n");
+                SGDeviceInfoParam deviceInfo = new SGDeviceInfoParam();
+                error = sgManager.getDeviceInfo(deviceInfo);
+                debugMessage("GetDeviceInfo() ret: " + error + "\n");
+                if (error == SGFDxErrorCode.SGFDX_ERROR_NONE) {
+                    mImageWidth = deviceInfo.imageWidth;
+                    mImageHeight = deviceInfo.imageHeight;
+
+                    sgManager.setTemplateFormat(SGFDxTemplateFormat.TEMPLATE_FORMAT_SG400);
+                    sgManager.getMaxTemplateSize(mMaxTemplateSize);
+                    debugMessage("TEMPLATE_FORMAT_SG400 SIZE: " + mMaxTemplateSize[0] + "\n");
+                    mRegisterTemplate = new byte[mMaxTemplateSize[0]];
+                    mVerifyTemplate = new byte[mMaxTemplateSize[0]];
+
+                    sgManager.setSmartCapture(this.mToggleButtonSmartCapture.isChecked());
+
+                    if (mAutoOnEnabled) {
+                        sgManager.startAutoOn();
+                        DisableControls();
+                    }
+                }
+                //Thread thread = new Thread(this);
+                //thread.start();
+            }
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        Log.i(TAG, "onDestroy()");
+
+        SecuGenManager sgManager  = SecuGenManager.getInstance(getActivity());
+        sgManager.close();
+
+        mRegisterImage = null;
+        mVerifyImage = null;
+        mRegisterTemplate = null;
+        mVerifyTemplate = null;
+
+        super.onDestroy();
     }
 
     @Override
@@ -171,9 +398,15 @@ public class HomeFragment extends Fragment implements View.OnClickListener {
         mMaxTemplateSize = new int[1];
 
         //USB Permissions
-//        mPermissionIntent = PendingIntent.getBroadcast(this, 0, new Intent(ACTION_USB_PERMISSION), 0);
-//        filter = new IntentFilter(ACTION_USB_PERMISSION);
-//        registerReceiver(mUsbReceiver, filter);
+        filter = new IntentFilter(ACTION_USB_PERMISSION);
+        getActivity().registerReceiver(mUsbReceiver, filter);
+
+        mLed = false;
+        SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+        sgManager.createSGAutoOnEventNotifier(this);
+        debugMessage("jnisgfplib version: " + sgManager.getVersion() + "\n");
+        mAutoOnEnabled = false;
+        nCaptureModeN = 0;
 
         return view;
     }
@@ -204,7 +437,133 @@ public class HomeFragment extends Fragment implements View.OnClickListener {
 
     @Override
     public void onClick(View view) {
+        long dwTimeStart = 0, dwTimeEnd = 0, dwTimeElapsed = 0;
+        if (view.equals(mToggleButtonSmartCapture)) {
+            SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+            sgManager.setSmartCapture(mToggleButtonSmartCapture.isChecked());
+        } else if (view.equals(mToggleButtonCaptureModeN)) {
+            SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+            sgManager.setSmartCaptureModeN(mToggleButtonCaptureModeN.isChecked());
+        } else if (view.equals(mCapture)) {
+            CaptureFingerPrint();
+        } else if (view.equals(mToggleButtonAutoOn)) {
+            SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+            if(mToggleButtonAutoOn.isChecked()) {
+                mAutoOnEnabled = true;
+                sgManager.startAutoOn();
+                DisableControls();
+            } else {
+                mAutoOnEnabled = false;
+                sgManager.stopAutoOn();
+                EnableControls();
+            }
+        } else if (view.equals(mButtonLed)) {
+            this.mCheckBoxMatched.setChecked(false);
+            mLed = !mLed;
+            dwTimeStart = System.currentTimeMillis();
+            SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+            long result = sgManager.setLedOn(mLed);
+            dwTimeEnd = System.currentTimeMillis();
+            dwTimeElapsed = dwTimeEnd-dwTimeStart;
+            debugMessage("setLedOn(" + mLed +") ret:" + result + " [" + dwTimeElapsed + "ms]\n");
+            mTextViewResult.setText("setLedOn(" + mLed +") ret: " + result + " [" + dwTimeElapsed + "ms]\n");
+        } else if (view.equals(mButtonRegister)) {
+            //DEBUG Log.d(TAG, "Clicked REGISTER");
+            debugMessage("Clicked REGISTER\n");
+            if (mRegisterImage != null)
+                mRegisterImage = null;
+            mRegisterImage = new byte[mImageWidth*mImageHeight];
 
+            this.mCheckBoxMatched.setChecked(false);
+            ByteBuffer byteBuf = ByteBuffer.allocate(mImageWidth*mImageHeight);
+            dwTimeStart = System.currentTimeMillis();
+
+            SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+            long result = sgManager.getImage(mRegisterImage);
+            sgManager.dumpFile("register.raw", mRegisterImage);
+            dwTimeEnd = System.currentTimeMillis();
+            dwTimeElapsed = dwTimeEnd-dwTimeStart;
+            debugMessage("GetImage() ret:" + result + " [" + dwTimeElapsed + "ms]\n");
+            mImageViewFingerprint.setImageBitmap(sgManager.toGrayscale(mRegisterImage, mImageWidth, mImageHeight));
+            dwTimeStart = System.currentTimeMillis();
+            result = sgManager.setTemplateFormat(SGFDxTemplateFormat.TEMPLATE_FORMAT_SG400);
+            dwTimeEnd = System.currentTimeMillis();
+            dwTimeElapsed = dwTimeEnd-dwTimeStart;
+            debugMessage("SetTemplateFormat(SG400) ret:" +  result + " [" + dwTimeElapsed + "ms]\n");
+            SGFingerInfo fpInfo = new SGFingerInfo();
+            for (int i=0; i< mRegisterTemplate.length; ++i)
+                mRegisterTemplate[i] = 0;
+            dwTimeStart = System.currentTimeMillis();
+            result = sgManager.createTemplate(fpInfo, mRegisterImage, mRegisterTemplate);
+            sgManager.dumpFile("register.min", mRegisterTemplate);
+            dwTimeEnd = System.currentTimeMillis();
+            dwTimeElapsed = dwTimeEnd-dwTimeStart;
+            debugMessage("CreateTemplate() ret:" + result + " [" + dwTimeElapsed + "ms]\n");
+            mImageViewRegister.setImageBitmap(sgManager.toGrayscale(mRegisterImage, mImageWidth, mImageHeight));
+            mTextViewResult.setText("Click Verify");
+            byteBuf = null;
+            mRegisterImage = null;
+            fpInfo = null;
+        } else if (view.equals(mButtonMatch)) {
+            //DEBUG Log.d(TAG, "Clicked MATCH");
+            debugMessage("Clicked MATCH\n");
+            if (mVerifyImage != null)
+                mVerifyImage = null;
+            mVerifyImage = new byte[mImageWidth*mImageHeight];
+            ByteBuffer byteBuf = ByteBuffer.allocate(mImageWidth*mImageHeight);
+            dwTimeStart = System.currentTimeMillis();
+
+            SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+            long result = sgManager.getImage(mVerifyImage);
+            sgManager.dumpFile("verify.raw", mVerifyImage);
+            dwTimeEnd = System.currentTimeMillis();
+            dwTimeElapsed = dwTimeEnd-dwTimeStart;
+            debugMessage("GetImage() ret:" + result + " [" + dwTimeElapsed + "ms]\n");
+
+            mImageViewFingerprint.setImageBitmap(sgManager.toGrayscale(mVerifyImage, mImageWidth, mImageHeight));
+            mImageViewVerify.setImageBitmap(sgManager.toGrayscale(mVerifyImage, mImageWidth, mImageHeight));
+            dwTimeStart = System.currentTimeMillis();
+            result = sgManager.setTemplateFormat(SGFDxTemplateFormat.TEMPLATE_FORMAT_SG400);
+            dwTimeEnd = System.currentTimeMillis();
+            dwTimeElapsed = dwTimeEnd-dwTimeStart;
+            debugMessage("SetTemplateFormat(SG400) ret:" +  result + " [" + dwTimeElapsed + "ms]\n");
+            SGFingerInfo fpInfo = new SGFingerInfo();
+            for (int i=0; i< mVerifyTemplate.length; ++i)
+                mVerifyTemplate[i] = 0;
+            dwTimeStart = System.currentTimeMillis();
+            result = sgManager.createTemplate(fpInfo, mVerifyImage, mVerifyTemplate);
+            sgManager.dumpFile("verify.min", mVerifyTemplate);
+            dwTimeEnd = System.currentTimeMillis();
+            dwTimeElapsed = dwTimeEnd-dwTimeStart;
+            debugMessage("CreateTemplate() ret:" + result+ " [" + dwTimeElapsed + "ms]\n");
+            boolean[] matched = new boolean[1];
+            dwTimeStart = System.currentTimeMillis();
+            sgManager.matchTemplate(mRegisterTemplate, mVerifyTemplate, SGFDxSecurityLevel.SL_NORMAL, matched);
+            dwTimeEnd = System.currentTimeMillis();
+            dwTimeElapsed = dwTimeEnd-dwTimeStart;
+            debugMessage("MatchTemplate() ret:" + result+ " [" + dwTimeElapsed + "ms]\n");
+            if (matched[0]) {
+                mTextViewResult.setText("MATCHED!!\n");
+                this.mCheckBoxMatched.setChecked(true);
+                debugMessage("MATCHED!!\n");
+            }
+            else {
+                mTextViewResult.setText("NOT MATCHED!!");
+                this.mCheckBoxMatched.setChecked(false);
+                debugMessage("NOT MATCHED!!\n");
+            }
+            byteBuf = null;
+            mVerifyImage = null;
+            fpInfo = null;
+            matched = null;
+        }
+    }
+
+    @Override
+    public void SGFingerPresentCallback() {
+        SecuGenManager sgManager = SecuGenManager.getInstance(getActivity());
+        sgManager.stopAutoOn();
+        fingerDetectedHandler.sendMessage(new Message());
     }
 
     /**
